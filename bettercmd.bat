@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 title Better CMD - Windows Toolkit
 
 :: ============================================================
-::  BETTER CMD v1.1.0
+::  BETTER CMD v1.1.1
 ::  All-in-one menu for essential Windows commands.
 ::  License : MIT
 ::  Usage   : Right-click and choose "Run as administrator"
@@ -11,7 +11,7 @@ title Better CMD - Windows Toolkit
 :: ============================================================
 
 :: ---- Edit these for your own GitHub repository -------------
-set "VER=1.1.0"
+set "VER=1.1.1"
 set "GH_USER=dev-fahim-code"
 set "GH_REPO=BetterCMD"
 set "GH_BRANCH=main"
@@ -913,7 +913,7 @@ if "%c%"=="5" netsh advfirewall show allprofiles state & goto SEC_B
 if "%c%"=="6" call :LOG "Security And Defender > List local user accounts"
 if "%c%"=="6" net user & goto SEC_B
 if "%c%"=="7" call :LOG "Security And Defender > Show logged-in users"
-if "%c%"=="7" query user & goto SEC_B
+if "%c%"=="7" powershell -NoProfile -Command "Get-CimInstance Win32_LogonSession | Where-Object {$_.LogonType -in 2,10,11} | ForEach-Object {$u=Get-CimAssociatedInstance -InputObject $_ -Association Win32_LoggedOnUser; [pscustomobject]@{User=($u.Domain+'\'+$u.Name);LogonType=$_.LogonType;Started=$_.StartTime}} | Format-Table -AutoSize" & goto SEC_B
 if "%c%"=="8" call :LOG "Security And Defender > Open Windows Security"
 if "%c%"=="8" start windowsdefender: & goto SECURITY
 if "%c%"=="0" goto MAIN
