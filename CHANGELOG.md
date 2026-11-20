@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 - 2026-11-21
+
+- Fixed: Security & Defender > "Show logged-in users" failed with "'query' is not recognized" on Windows Home. It now uses PowerShell and works on every Windows edition.
+
 ## 1.1.0 - 2026-11-20
 
 Initial public release.
