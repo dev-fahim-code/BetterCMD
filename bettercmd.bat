@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 title Better CMD - Windows Toolkit
 
 :: ============================================================
-::  BETTER CMD v1.1.1
+::  BETTER CMD v1.1.2
 ::  All-in-one menu for essential Windows commands.
 ::  License : MIT
 ::  Usage   : Right-click and choose "Run as administrator"
@@ -11,7 +11,7 @@ title Better CMD - Windows Toolkit
 :: ============================================================
 
 :: ---- Edit these for your own GitHub repository -------------
-set "VER=1.1.1"
+set "VER=1.1.2"
 set "GH_USER=dev-fahim-code"
 set "GH_REPO=BetterCMD"
 set "GH_BRANCH=main"
@@ -105,7 +105,8 @@ goto MAIN
 
 :EXIT
 call :LOG "Session ended"
-echo %R%
+color
+echo.%R%
 exit /b
 
 :: ------------------------------------------------------------
@@ -120,10 +121,26 @@ echo %A%============================================================%R%
 echo.
 exit /b
 
-:BACK
-echo.
-pause
-goto %~1
+:: ------------------------------------------------------------
+:: Helpers
+:: REQADMIN: returns 1 (after printing a hint) when not running as Administrator
+:REQADMIN
+if "%ISADMIN%"=="1" exit /b 0
+echo   %E%This option needs Administrator rights.%R%
+echo   Go back to the main menu and press E to restart as Administrator.
+exit /b 1
+
+:: GETDESK: sets DESK to the real Desktop folder (works when the Desktop is on OneDrive)
+:GETDESK
+set "DESK="
+for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESK=%%d"
+if not defined DESK set "DESK=%USERPROFILE%\Desktop"
+exit /b
+
+:: UNQ: removes double quotes from the variable named in %1 (paths pasted with "Copy as path")
+:UNQ
+if defined %1 set "%1=!%1:"=!"
+exit /b
 
 :ELEVATE
 if "%ISADMIN%"=="1" (
@@ -132,8 +149,14 @@ if "%ISADMIN%"=="1" (
     goto MAIN
 )
 call :LOG "Restart as administrator"
-powershell -NoProfile -Command "Start-Process -FilePath '%SELF%' -Verb RunAs"
+set "SELFQ=%SELF:'=''%"
+powershell -NoProfile -Command "try{Start-Process -FilePath '%SELFQ%' -Verb RunAs -ErrorAction Stop}catch{exit 1}"
+if errorlevel 1 goto ELEV_FAIL
 exit /b
+:ELEV_FAIL
+echo   The administrator prompt was cancelled or failed.
+pause
+goto MAIN
 
 :: ------------------------------------------------------------
 :: Logging: appends a timestamped line when logging is on
@@ -150,7 +173,9 @@ echo %A%  --- ACTION LOG - last 40 entries ---%R%
 echo   %D%%LOGFILE%%R%
 echo.
 powershell -NoProfile -Command "$f=$env:APPDATA+'\BetterCMD\bettercmd.log'; if(Test-Path $f){Get-Content $f -Tail 40}else{'No log yet.'}"
-call :BACK MAIN
+echo.
+pause
+goto MAIN
 
 :: ------------------------------------------------------------
 :: Settings storage
@@ -201,9 +226,9 @@ set /p "c=  Select: "
 if "%c%"=="1" goto THEMEPICK
 if "%c%"=="2" goto SET_LOGGING
 if "%c%"=="3" goto SET_AUTOCHECK
-if "%c%"=="4" powershell -NoProfile -Command "$f=$env:APPDATA+'\BetterCMD\bettercmd.log'; if(Test-Path $f){Get-Content $f -Tail 40}else{'No log yet.'}" & call :BACK SETTINGS
+if "%c%"=="4" powershell -NoProfile -Command "$f=$env:APPDATA+'\BetterCMD\bettercmd.log'; if(Test-Path $f){Get-Content $f -Tail 40}else{'No log yet.'}" & echo. & pause & goto SETTINGS
 if "%c%"=="5" start "" notepad "%LOGFILE%" & goto SETTINGS
-if "%c%"=="6" del /q "%LOGFILE%" >nul 2>&1 & echo Log cleared. & call :BACK SETTINGS
+if "%c%"=="6" del /q "%LOGFILE%" >nul 2>&1 & echo Log cleared. & echo. & pause & goto SETTINGS
 if "%c%"=="7" start "" explorer "%DATA%" & goto SETTINGS
 if "%c%"=="0" goto MAIN
 goto SETTINGS
@@ -299,7 +324,9 @@ echo   %A%Running:%R% !FCMD!
 echo.
 call :LOG "Favorite run > !FNAME!"
 cmd /v:off /c "!FCMD!"
-call :BACK FAVS
+echo.
+pause
+goto FAVS
 
 :FAV_ADD
 set "fn="
@@ -362,34 +389,41 @@ goto SU_ERR
 echo   %E%Self-update is not configured yet.%R%
 echo   Open bettercmd.bat in a text editor and set GH_USER and GH_REPO
 echo   near the top to your GitHub username and repository name.
-call :BACK MAIN
+echo.
+pause
+goto MAIN
 
 :SU_ERR
 echo   %E%Could not check for updates.%R%
 echo   Check your internet connection and that this file exists:
 echo   %D%%URLV%%R%
-call :BACK MAIN
+echo.
+pause
+goto MAIN
 
 :SU_OK
 echo   %G%You are up to date.%R% Latest version: v%UPDV%
 set "CFG_LASTCHECK=%date%"
 set "UPDMSG="
 call :SAVECFG
-call :BACK MAIN
+echo.
+pause
+goto MAIN
 
 :SU_NEW
 echo   %Y%New version available: v%UPDV%%R%
 echo   %D%https://github.com/%GH_USER%/%GH_REPO%/releases%R%
 echo.
-set "y="
-set /p "y=  Download and install it now? (Y/N): "
-if /i not "%y%"=="Y" goto MAIN
+set "yn="
+set /p "yn=  Download and install it now? (Y/N): "
+if /i not "%yn%"=="Y" goto MAIN
 
 :SU_APPLY
 set "NEWF=%SELFDIR%bettercmd.update.tmp"
+set "NEWQ=%NEWF:'=''%"
 set "URLB=https://raw.githubusercontent.com/%GH_USER%/%GH_REPO%/%GH_BRANCH%/bettercmd.bat"
 echo   Downloading...
-powershell -NoProfile -Command "try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $t=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 '%URLB%').Content; if($t -notmatch '@echo off'){throw 'bad file'}; $t=$t -replace '\r?\n',[Environment]::NewLine; [IO.File]::WriteAllText('%NEWF%',$t,[Text.Encoding]::ASCII)}catch{exit 1}"
+powershell -NoProfile -Command "try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $t=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 '%URLB%').Content; if($t -notmatch '@echo off'){throw 'bad file'}; $t=$t -replace '\r?\n',[Environment]::NewLine; [IO.File]::WriteAllText('%NEWQ%',$t,[Text.Encoding]::ASCII)}catch{exit 1}"
 if errorlevel 1 goto SU_ERR
 if not exist "%NEWF%" goto SU_ERR
 set "UPDS=%TEMP%\bettercmd_apply.cmd"
@@ -442,11 +476,20 @@ if "%c%"=="7" cscript //nologo %windir%\system32\slmgr.vbs /xpr & goto SYSINFO_B
 if "%c%"=="8" call :LOG "System Information > Environment variables"
 if "%c%"=="8" set | more & goto SYSINFO_B
 if "%c%"=="9" call :LOG "System Information > Battery report (laptops)"
-if "%c%"=="9" powercfg /batteryreport /output "%USERPROFILE%\Desktop\battery-report.html" & echo Saved to Desktop\battery-report.html & goto SYSINFO_B
+if "%c%"=="9" goto SYS_BATT
 if "%c%"=="0" goto MAIN
 goto SYSINFO
+:SYS_BATT
+call :GETDESK
+del /q "!DESK!\battery-report.html" >nul 2>&1
+powercfg /batteryreport /output "!DESK!\battery-report.html"
+if exist "!DESK!\battery-report.html" echo Saved to "!DESK!\battery-report.html"
+if not exist "!DESK!\battery-report.html" echo No battery report was created. This PC may not have a battery.
+goto SYSINFO_B
 :SYSINFO_B
-call :BACK SYSINFO
+echo.
+pause
+goto SYSINFO
 
 :: ============================================================
 :NETWORK
@@ -467,7 +510,7 @@ echo   %Y%[11]%R% Available Wi-Fi networks nearby
 echo   %Y%[12]%R% Reset network stack (admin, restart needed)
 echo   %Y%[13]%R% Show MAC addresses
 echo   %Y%[14]%R% ARP table
-echo   %Y%[15]%R% Internet speed check (ping Google/Cloudflare)
+echo   %Y%[15]%R% Internet connection check (ping Google/Cloudflare)
 echo   %Y%[0]%R%  Back
 echo.
 set "c="
@@ -500,7 +543,7 @@ if "%c%"=="13" call :LOG "Network Tools > Show MAC addresses"
 if "%c%"=="13" getmac /v & goto NET_B
 if "%c%"=="14" call :LOG "Network Tools > ARP table"
 if "%c%"=="14" arp -a & goto NET_B
-if "%c%"=="15" call :LOG "Network Tools > Internet speed check (ping Google/Cloudflare)"
+if "%c%"=="15" call :LOG "Network Tools > Internet connection check (ping Google/Cloudflare)"
 if "%c%"=="15" ping -n 4 8.8.8.8 & ping -n 4 1.1.1.1 & goto NET_B
 if "%c%"=="0"  goto MAIN
 goto NETWORK
@@ -525,17 +568,20 @@ set /p "w=  Wi-Fi profile name: "
 if defined w netsh wlan show profile name="%w%" key=clear | findstr /i "SSID Authentication Key"
 goto NET_B
 :NET_RESET
+call :REQADMIN || goto NET_B
 echo This resets Winsock, TCP/IP and DNS. A restart is required afterward.
-set "y="
-set /p "y=  Continue? (Y/N): "
-if /i not "%y%"=="Y" goto NETWORK
+set "yn="
+set /p "yn=  Continue? (Y/N): "
+if /i not "%yn%"=="Y" goto NETWORK
 netsh winsock reset
 netsh int ip reset
 ipconfig /flushdns
 echo Done. Please restart your PC.
 goto NET_B
 :NET_B
-call :BACK NETWORK
+echo.
+pause
+goto NETWORK
 
 :: ============================================================
 :UPDATES
@@ -573,9 +619,9 @@ if "%c%"=="5"  goto UPD_INSTALL
 if "%c%"=="6" call :LOG "Updates And Package Managers > winget: uninstall an app"
 if "%c%"=="6"  goto UPD_UNINSTALL
 if "%c%"=="7" call :LOG "Updates And Package Managers > winget: export installed apps to Desktop"
-if "%c%"=="7"  winget export -o "%USERPROFILE%\Desktop\apps.json" & goto UPD_B
+if "%c%"=="7"  call :GETDESK & winget export -o "!DESK!\apps.json" & goto UPD_B
 if "%c%"=="8" call :LOG "Updates And Package Managers > winget: import apps from Desktop list"
-if "%c%"=="8"  winget import -i "%USERPROFILE%\Desktop\apps.json" --accept-package-agreements --accept-source-agreements & goto UPD_B
+if "%c%"=="8"  call :GETDESK & winget import -i "!DESK!\apps.json" --accept-package-agreements --accept-source-agreements & goto UPD_B
 if "%c%"=="9" call :LOG "Updates And Package Managers > Chocolatey: upgrade all"
 if "%c%"=="9"  call :RUNIF choco "choco upgrade all -y" & goto UPD_B
 if "%c%"=="10" call :LOG "Updates And Package Managers > Scoop: update all"
@@ -585,28 +631,30 @@ if "%c%"=="11" call :RUNIF npm "npm update -g" & goto UPD_B
 if "%c%"=="12" call :LOG "Updates And Package Managers > pip: upgrade pip"
 if "%c%"=="12" call :RUNIF python "python -m pip install --upgrade pip" & goto UPD_B
 if "%c%"=="13" call :LOG "Updates And Package Managers > Windows Update: scan and install"
-if "%c%"=="13" usoclient StartScan & usoclient StartDownload & usoclient StartInstall & echo Windows Update tasks started in the background. & goto UPD_B
+if "%c%"=="13" usoclient StartScan & usoclient StartDownload & usoclient StartInstall & echo Windows Update commands sent. Open Windows Update in Settings to see progress. & goto UPD_B
 if "%c%"=="14" call :LOG "Updates And Package Managers > Open Windows Update settings"
 if "%c%"=="14" start ms-settings:windowsupdate & goto UPDATES
 if "%c%"=="0"  goto MAIN
 goto UPDATES
 :UPD_SEARCH
-set "a="
-set /p "a=  App name to search: "
-if defined a winget search "%a%"
+set "app="
+set /p "app=  App name to search: "
+if defined app winget search "%app%"
 goto UPD_B
 :UPD_INSTALL
-set "a="
-set /p "a=  App name or ID to install: "
-if defined a winget install "%a%" --accept-package-agreements --accept-source-agreements
+set "app="
+set /p "app=  App name or ID to install: "
+if defined app winget install "%app%" --accept-package-agreements --accept-source-agreements
 goto UPD_B
 :UPD_UNINSTALL
-set "a="
-set /p "a=  App name or ID to uninstall: "
-if defined a winget uninstall "%a%"
+set "app="
+set /p "app=  App name or ID to uninstall: "
+if defined app winget uninstall "%app%"
 goto UPD_B
 :UPD_B
-call :BACK UPDATES
+echo.
+pause
+goto UPDATES
 
 :: helper: run a command only if the tool exists
 :RUNIF
@@ -614,7 +662,7 @@ where %~1 >nul 2>&1
 if errorlevel 1 (
     echo [skipped] %~1 is not installed.
 ) else (
-    %~2
+    call %~2
 )
 exit /b
 
@@ -654,10 +702,13 @@ call :LOG "Update everything step 7/7 > Windows Update"
 usoclient StartScan
 usoclient StartDownload
 usoclient StartInstall
+echo   Windows Update commands sent. Open Windows Update in Settings to see progress.
 call :LOG "Update everything finished"
 echo.
 echo %G%All done.%R% Log: %LOGFILE%
-call :BACK MAIN
+echo.
+pause
+goto MAIN
 
 :: ============================================================
 :REPAIR
@@ -708,6 +759,7 @@ start explorer.exe
 echo Icon cache rebuilt.
 goto REP_B
 :REP_WU
+call :REQADMIN || goto REP_B
 net stop wuauserv >nul 2>&1
 net stop bits >nul 2>&1
 net stop cryptsvc >nul 2>&1
@@ -719,7 +771,9 @@ net start wuauserv >nul 2>&1
 echo Windows Update components reset.
 goto REP_B
 :REP_B
-call :BACK REPAIR
+echo.
+pause
+goto REPAIR
 
 :: ============================================================
 :CLEANUP
@@ -765,12 +819,15 @@ for /d %%i in ("%TEMP%\*") do rd /s /q "%%i" >nul 2>&1
 echo User temp files deleted.
 exit /b
 :CLEAN_WINTEMP
+call :REQADMIN || exit /b 1
 del /q /f /s "%windir%\Temp\*" >nul 2>&1
 for /d %%i in ("%windir%\Temp\*") do rd /s /q "%%i" >nul 2>&1
 echo Windows temp files deleted.
 exit /b
 :CLN_B
-call :BACK CLEANUP
+echo.
+pause
+goto CLEANUP
 
 :: ============================================================
 :PROCS
@@ -844,7 +901,9 @@ set /p "s=  Service name: "
 if defined s net stop "%s%" & net start "%s%"
 goto PRC_B
 :PRC_B
-call :BACK PROCS
+echo.
+pause
+goto PROCS
 
 :: ============================================================
 :DISK
@@ -878,10 +937,15 @@ goto DISK
 :DSK_SIZE
 set "f="
 set /p "f=  Folder path: "
-if defined f powershell -NoProfile -Command "$s=(Get-ChildItem -LiteralPath '%f%' -Recurse -File -ErrorAction SilentlyContinue | Measure Length -Sum).Sum; '{0:N2} GB' -f ($s/1GB)"
+if not defined f goto DSK_B
+call :UNQ f
+set "fq=!f:'=''!"
+powershell -NoProfile -Command "$s=(Get-ChildItem -LiteralPath '!fq!' -Recurse -File -ErrorAction SilentlyContinue | Measure Length -Sum).Sum; '{0:N2} GB' -f ($s/1GB)"
 goto DSK_B
 :DSK_B
-call :BACK DISK
+echo.
+pause
+goto DISK
 
 :: ============================================================
 :SECURITY
@@ -919,7 +983,9 @@ if "%c%"=="8" start windowsdefender: & goto SECURITY
 if "%c%"=="0" goto MAIN
 goto SECURITY
 :SEC_B
-call :BACK SECURITY
+echo.
+pause
+goto SECURITY
 
 :: ============================================================
 :FILES
@@ -962,11 +1028,13 @@ goto FILES
 :F_LIST
 set "f="
 set /p "f=  Folder path: "
+call :UNQ f
 if defined f dir "%f%"
 goto F_B
 :F_TREE
 set "f="
 set /p "f=  Folder path: "
+call :UNQ f
 if defined f tree "%f%" /f | more
 goto F_B
 :F_FIND
@@ -974,6 +1042,7 @@ set "f="
 set "n="
 set /p "f=  Start folder (e.g. C:\): "
 set /p "n=  File name or pattern (e.g. *.pdf): "
+call :UNQ f
 if defined f if defined n dir "%f%\%n%" /s /b
 goto F_B
 :F_GREP
@@ -981,39 +1050,49 @@ set "f="
 set "t="
 set /p "f=  Folder path: "
 set /p "t=  Text to find: "
+call :UNQ f
 if defined f if defined t findstr /s /i /n /c:"%t%" "%f%\*.*"
 goto F_B
 :F_TYPE
 set "f="
 set /p "f=  File path: "
+call :UNQ f
 if defined f type "%f%" | more
 goto F_B
 :F_FC
-set "a="
-set "b="
-set /p "a=  First file: "
-set /p "b=  Second file: "
-if defined a if defined b fc "%a%" "%b%"
+set "f1="
+set "f2="
+set /p "f1=  First file: "
+set /p "f2=  Second file: "
+call :UNQ f1
+call :UNQ f2
+if defined f1 if defined f2 fc "%f1%" "%f2%"
 goto F_B
 :F_COPY
-set "a="
-set "b="
-set /p "a=  Source folder: "
-set /p "b=  Destination folder: "
-if defined a if defined b robocopy "%a%" "%b%" /E /R:1 /W:1
+set "src="
+set "dst="
+set /p "src=  Source folder: "
+set /p "dst=  Destination folder: "
+call :UNQ src
+call :UNQ dst
+if defined src if defined dst robocopy "%src%" "%dst%" /E /R:1 /W:1
 goto F_B
 :F_HIDDEN
 set "f="
 set /p "f=  Folder path: "
+call :UNQ f
 if defined f dir "%f%" /a:h
 goto F_B
 :F_OPEN
 set "f="
 set /p "f=  Folder path: "
+call :UNQ f
 if defined f start "" explorer "%f%"
 goto FILES
 :F_B
-call :BACK FILES
+echo.
+pause
+goto FILES
 
 :: ============================================================
 :LAUNCH
@@ -1097,13 +1176,28 @@ if "%c%"=="7" shutdown /r /o /t 0
 if "%c%"=="8" call :LOG "Power And Shutdown > Show power plans"
 if "%c%"=="8" powercfg /list & goto PWR_B
 if "%c%"=="9" call :LOG "Power And Shutdown > Set High Performance plan"
-if "%c%"=="9" powercfg /setactive SCHEME_MIN & echo High Performance plan set. & goto PWR_B
+if "%c%"=="9" powercfg /setactive SCHEME_MIN && (echo High Performance plan set.) || (echo This PC has no High Performance plan. Use option 8 to see the plans you can use.)
+if "%c%"=="9" goto PWR_B
 if "%c%"=="0" goto MAIN
 goto POWER
 :PWR_TIMER
 set "m="
 set /p "m=  Minutes until shutdown: "
-if defined m set /a secs=%m%*60 & shutdown /s /t !secs!
+if not defined m goto POWER
+set "mbad="
+for /f "delims=0123456789" %%x in ("%m%") do set "mbad=1"
+if defined mbad goto PWR_TBAD
+for /f "tokens=* delims=0" %%x in ("%m%") do set "m=%%x"
+if not "%m:~4%"=="" goto PWR_TBAD
+set /a secs=%m%*60
+if %secs% LSS 60 goto PWR_TBAD
+shutdown /s /t %secs%
+echo   Shutdown scheduled in %m% minute(s). Use option 4 to cancel it.
+goto PWR_B
+:PWR_TBAD
+echo   %E%Enter a whole number of minutes from 1 to 9999.%R%
 goto PWR_B
 :PWR_B
-call :BACK POWER
+echo.
+pause
+goto POWER
